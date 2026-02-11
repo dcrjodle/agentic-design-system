@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/codeblock.tsx","./src/components/componentcard.tsx","./src/components/layout.tsx","./src/components/searchbar.tsx","./src/lib/api.ts","./src/pages/componentdetail.tsx","./src/pages/components.tsx","./src/pages/dashboard.tsx","./src/pages/import.tsx"],"version":"5.9.3"}

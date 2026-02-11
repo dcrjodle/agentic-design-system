@@ -1,0 +1,15 @@
+{
+  "name": "agentic-design-system",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n server,ui -c blue,green \"pnpm --filter @ads/server dev\" \"pnpm --filter @ads/ui dev\"",
+    "build": "pnpm --filter @ads/shared build && pnpm --filter @ads/server build && pnpm --filter @ads/ui build && pnpm --filter @ads/mcp-server build",
+    "build:server": "pnpm --filter @ads/server build",
+    "build:ui": "pnpm --filter @ads/ui build",
+    "build:mcp": "pnpm --filter @ads/mcp-server build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.0"
+  }
+}
