@@ -2,14 +2,36 @@ import { useMemo } from "react";
 import React from "react";
 import { transform } from "sucrase";
 
-function compileToElement(code: string, name: string): React.ReactNode {
-  try {
-    const clean = code
-      .replace(/export\s+default\s+/g, "")
-      .replace(/export\s+/g, "")
-      .replace(/import\s+.*?from\s+['"].*?['"];?\s*/g, "");
+type CompDef = { name: string; code: string };
 
-    const { code: compiled } = transform(clean, {
+function cleanCode(code: string) {
+  return code
+    .replace(/export\s+default\s+/g, "")
+    .replace(/export\s+/g, "")
+    .replace(/import\s+.*?from\s+['"].*?['"];?\s*/g, "");
+}
+
+function resolveAllDeps(code: string, allComponents: CompDef[]): CompDef[] {
+  const resolved = new Map<string, CompDef>();
+  const queue = [code];
+  while (queue.length) {
+    const src = cleanCode(queue.shift()!);
+    for (const [, tag] of src.matchAll(/<([A-Z][A-Za-z0-9]+)/g)) {
+      if (resolved.has(tag)) continue;
+      const dep = allComponents.find(c => c.name === tag);
+      if (dep) { resolved.set(tag, dep); queue.push(dep.code); }
+    }
+  }
+  return Array.from(resolved.values());
+}
+
+function compileToElement(code: string, name: string, allComponents?: CompDef[]): React.ReactNode {
+  try {
+    const clean = cleanCode(code);
+    const deps = allComponents ? resolveAllDeps(code, allComponents) : [];
+    const depsCode = deps.map(d => cleanCode(d.code)).join("\n");
+
+    const { code: compiled } = transform(depsCode + "\n" + clean, {
       transforms: ["jsx", "typescript"],
       jsxRuntime: "classic",
       production: true,
@@ -28,8 +50,8 @@ function compileToElement(code: string, name: string): React.ReactNode {
   }
 }
 
-export default function Sandbox({ code, name = "Example", className }: { code: string; name?: string; className?: string }) {
-  const element = useMemo(() => code ? compileToElement(code, name) : null, [code, name]);
+export default function Sandbox({ code, name = "Example", className, allComponents }: { code: string; name?: string; className?: string; allComponents?: CompDef[] }) {
+  const element = useMemo(() => code ? compileToElement(code, name, allComponents) : null, [code, name, allComponents]);
 
   if (!code) {
     return (

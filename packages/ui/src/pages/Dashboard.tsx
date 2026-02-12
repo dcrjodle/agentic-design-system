@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Search, ArrowLeft, Trash2, ExternalLink, Code2, BookOpen, Layout, Braces, Puzzle, Atom, Boxes, Box } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Search, ArrowLeft, Trash2, ExternalLink, Code2, BookOpen, Layout, Braces, Puzzle, Atom, Boxes, Box, Pencil, Save, X, Eye } from "lucide-react";
 import Sandbox from "@/components/Sandbox";
 import CodeBlock from "@/components/CodeBlock";
 
@@ -38,6 +39,11 @@ function categorizeTier(category: string): Tier {
   if (["organism", "organisms", "section", "sections", "page", "pages", "template", "templates"].some(k => c.includes(k))) return "organism";
   if (["molecule", "molecules", "composite", "composites", "group", "groups"].some(k => c.includes(k))) return "molecule";
   return "atom";
+}
+
+function extractSubComponents(code: string, allComponents: DesignComponent[]): DesignComponent[] {
+  const tags = new Set(Array.from(code.matchAll(/<([A-Z][A-Za-z0-9]+)/g), m => m[1]));
+  return allComponents.filter(c => tags.has(c.name));
 }
 
 export default function Dashboard() {
@@ -71,7 +77,19 @@ export default function Dashboard() {
   };
 
   if (selected) {
-    return <DetailView component={selected} onBack={() => setSelected(null)} onDelete={handleDelete} />;
+    return (
+      <DetailView
+        component={selected}
+        allComponents={components}
+        onBack={() => setSelected(null)}
+        onDelete={handleDelete}
+        onSelect={setSelected}
+        onUpdate={(updated) => {
+          setComponents(prev => prev.map(c => c.id === updated.id ? updated : c));
+          setSelected(updated);
+        }}
+      />
+    );
   }
 
   return (
@@ -108,7 +126,7 @@ export default function Dashboard() {
 
           {(Object.keys(tierConfig) as Tier[]).map((t) => (
             <TabsContent key={t} value={t} className="mt-4">
-              <TierView tier={t} components={tab === t ? filtered : grouped[t]} onSelect={setSelected} />
+              <TierView tier={t} components={tab === t ? filtered : grouped[t]} onSelect={setSelected} allComponents={components} />
             </TabsContent>
           ))}
         </Tabs>
@@ -117,7 +135,7 @@ export default function Dashboard() {
   );
 }
 
-function TierView({ tier, components, onSelect }: { tier: Tier; components: DesignComponent[]; onSelect: (c: DesignComponent) => void }) {
+function TierView({ tier, components, onSelect, allComponents }: { tier: Tier; components: DesignComponent[]; onSelect: (c: DesignComponent) => void; allComponents: DesignComponent[] }) {
   const { description } = tierConfig[tier];
 
   if (components.length === 0) {
@@ -142,7 +160,7 @@ function TierView({ tier, components, onSelect }: { tier: Tier; components: Desi
               onClick={() => onSelect(c)}
             >
               <div className="h-36 border-b flex items-center justify-center pointer-events-none bg-muted/10">
-                <Sandbox code={c.code} name={c.name} />
+                <Sandbox code={c.code} name={c.name} allComponents={allComponents} />
               </div>
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">
@@ -162,8 +180,41 @@ function TierView({ tier, components, onSelect }: { tier: Tier; components: Desi
 const detailTabs = ["Preview", "Code", "Usage", "Props"] as const;
 type DetailTab = (typeof detailTabs)[number];
 
-function DetailView({ component, onBack, onDelete }: { component: DesignComponent; onBack: () => void; onDelete: (id: string) => void }) {
+function DetailView({
+  component,
+  allComponents,
+  onBack,
+  onDelete,
+  onSelect,
+  onUpdate,
+}: {
+  component: DesignComponent;
+  allComponents: DesignComponent[];
+  onBack: () => void;
+  onDelete: (id: string) => void;
+  onSelect: (c: DesignComponent) => void;
+  onUpdate: (c: DesignComponent) => void;
+}) {
   const [tab, setTab] = useState<DetailTab>("Preview");
+  const [editing, setEditing] = useState(false);
+  const [editCode, setEditCode] = useState(component.code);
+  const [saving, setSaving] = useState(false);
+
+  const subComponents = useMemo(
+    () => extractSubComponents(component.code, allComponents.filter(c => c.id !== component.id)),
+    [component, allComponents]
+  );
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const updated = await api.updateComponent(component.id, { code: editCode });
+      onUpdate(updated);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -196,7 +247,40 @@ function DetailView({ component, onBack, onDelete }: { component: DesignComponen
             </Button>
           </div>
         </div>
+
         {component.description && <p className="text-sm text-muted-foreground">{component.description}</p>}
+
+        {subComponents.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-muted-foreground">Sub-components:</span>
+            {subComponents.map((sub) => {
+              const tier = categorizeTier(sub.category);
+              const TierIcon = tierConfig[tier].icon;
+              return (
+                <Popover key={sub.id}>
+                  <PopoverTrigger asChild>
+                    <button className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-xs hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer">
+                      <TierIcon className="size-3" />
+                      {sub.name}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-72 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm">{sub.name}</span>
+                      <Badge variant="outline" className="text-[10px]">{sub.category}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {sub.usage || "No usage documented"}
+                    </p>
+                    <Button size="sm" className="w-full" onClick={() => onSelect(sub)}>
+                      <Eye className="size-3.5" /> View Component
+                    </Button>
+                  </PopoverContent>
+                </Popover>
+              );
+            })}
+          </div>
+        )}
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as DetailTab)}>
           <TabsList variant="line">
@@ -208,12 +292,37 @@ function DetailView({ component, onBack, onDelete }: { component: DesignComponen
 
           <TabsContent value="Preview" className="mt-4">
             <div className="h-[calc(100vh-320px)] rounded-lg border border-dashed flex items-center justify-center bg-muted/10">
-              <Sandbox code={component.code} name={component.name} />
+              <Sandbox code={component.code} name={component.name} allComponents={allComponents} />
             </div>
           </TabsContent>
 
           <TabsContent value="Code" className="mt-4">
-            <CodeBlock code={component.code} />
+            <div className="flex items-center justify-end gap-2 mb-2">
+              {editing ? (
+                <>
+                  <Button variant="ghost" size="sm" onClick={() => { setEditing(false); setEditCode(component.code); }}>
+                    <X className="size-3.5" /> Cancel
+                  </Button>
+                  <Button size="sm" onClick={handleSave} disabled={saving || editCode === component.code}>
+                    <Save className="size-3.5" /> {saving ? "Saving..." : "Save"}
+                  </Button>
+                </>
+              ) : (
+                <Button variant="ghost" size="sm" onClick={() => { setEditCode(component.code); setEditing(true); }}>
+                  <Pencil className="size-3.5" /> Edit
+                </Button>
+              )}
+            </div>
+            {editing ? (
+              <textarea
+                value={editCode}
+                onChange={(e) => setEditCode(e.target.value)}
+                className="w-full h-[calc(100vh-400px)] rounded-lg border bg-zinc-950 p-4 text-sm font-mono text-zinc-100 resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+                spellCheck={false}
+              />
+            ) : (
+              <CodeBlock code={component.code} />
+            )}
           </TabsContent>
 
           <TabsContent value="Usage" className="mt-4">
