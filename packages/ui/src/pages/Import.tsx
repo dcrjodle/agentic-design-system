@@ -1,13 +1,17 @@
 import { useState } from "react";
 import { Figma, BookOpen, Loader2, CheckCircle, AlertCircle } from "lucide-react";
-import { api } from "../lib/api";
+import { api } from "@/lib/api";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 
 export default function Import() {
   return (
-    <div className="max-w-2xl space-y-8">
+    <div className="max-w-2xl mx-auto p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Import</h1>
-        <p className="text-sm text-zinc-400 mt-1">Import components from external sources</p>
+        <p className="text-sm text-muted-foreground mt-1">Import components from external sources</p>
       </div>
       <FigmaImport />
       <StorybookImport />
@@ -35,39 +39,26 @@ function FigmaImport() {
   };
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <Figma className="w-5 h-5 text-violet-400" />
-        <h2 className="font-medium">Figma</h2>
-      </div>
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <input
-          type="text"
-          placeholder="File key (from Figma URL)"
-          value={fileKey}
-          onChange={(e) => setFileKey(e.target.value)}
-          className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
-          required
-        />
-        <input
-          type="password"
-          placeholder="Personal access token"
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
-          required
-        />
-        <button
-          type="submit"
-          disabled={status === "loading"}
-          className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-        >
-          {status === "loading" && <Loader2 className="w-4 h-4 animate-spin" />}
-          Import from Figma
-        </button>
-      </form>
-      <StatusMessage status={status} result={result} />
-    </div>
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Figma className="size-5 text-primary" />
+          <CardTitle>Figma</CardTitle>
+        </div>
+        <CardDescription>Import components from a Figma file</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <Input placeholder="File key (from Figma URL)" value={fileKey} onChange={(e) => setFileKey(e.target.value)} required />
+          <Input type="password" placeholder="Personal access token" value={token} onChange={(e) => setToken(e.target.value)} required />
+          <Button type="submit" disabled={status === "loading"} size="sm">
+            {status === "loading" && <Loader2 className="size-4 animate-spin" />}
+            Import from Figma
+          </Button>
+        </form>
+        <StatusMessage status={status} result={result} />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -90,48 +81,45 @@ function StorybookImport() {
   };
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <BookOpen className="w-5 h-5 text-violet-400" />
-        <h2 className="font-medium">Storybook</h2>
-      </div>
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <input
-          type="url"
-          placeholder="Storybook URL (e.g. http://localhost:6006)"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
-          required
-        />
-        <button
-          type="submit"
-          disabled={status === "loading"}
-          className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-        >
-          {status === "loading" && <Loader2 className="w-4 h-4 animate-spin" />}
-          Import from Storybook
-        </button>
-      </form>
-      <StatusMessage status={status} result={result} />
-    </div>
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <BookOpen className="size-5 text-primary" />
+          <CardTitle>Storybook</CardTitle>
+        </div>
+        <CardDescription>Import components from a Storybook instance</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <Input type="url" placeholder="Storybook URL (e.g. http://localhost:6006)" value={url} onChange={(e) => setUrl(e.target.value)} required />
+          <Button type="submit" disabled={status === "loading"} size="sm">
+            {status === "loading" && <Loader2 className="size-4 animate-spin" />}
+            Import from Storybook
+          </Button>
+        </form>
+        <StatusMessage status={status} result={result} />
+      </CardContent>
+    </Card>
   );
 }
 
 function StatusMessage({ status, result }: { status: string; result: any }) {
   if (status === "success" && result) {
     return (
-      <div className="mt-4 flex items-start gap-2 text-sm text-emerald-400">
-        <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" />
-        <span>Imported {result.imported} components ({result.skipped} skipped)</span>
+      <div className="mt-4 flex items-center gap-2">
+        <CheckCircle className="size-4 text-emerald-500" />
+        <span className="text-sm text-emerald-500">
+          Imported {result.imported} components
+        </span>
+        <Badge variant="secondary" className="text-xs">{result.skipped} skipped</Badge>
       </div>
     );
   }
   if (status === "error") {
     return (
-      <div className="mt-4 flex items-start gap-2 text-sm text-red-400">
-        <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-        <span>{String(result)}</span>
+      <div className="mt-4 flex items-center gap-2">
+        <AlertCircle className="size-4 text-destructive" />
+        <span className="text-sm text-destructive">{String(result)}</span>
       </div>
     );
   }

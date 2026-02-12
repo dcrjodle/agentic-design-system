@@ -1,82 +1,250 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { Layers, FolderOpen, Clock } from "lucide-react";
-import { api } from "../lib/api";
-import ComponentCard from "../components/ComponentCard";
+import { useEffect, useState, useMemo } from "react";
+import { api } from "@/lib/api";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Search, ArrowLeft, Trash2, ExternalLink, Code2, BookOpen, Layout, Braces, Puzzle, Atom, Boxes, Box } from "lucide-react";
+import Sandbox from "@/components/Sandbox";
+import CodeBlock from "@/components/CodeBlock";
+
+type DesignComponent = {
+  id: string;
+  name: string;
+  category: string;
+  description: string | null;
+  code: string;
+  usage: string | null;
+  layout: string | null;
+  tokens: string | null;
+  props: string | null;
+  figma_url: string | null;
+  storybook_url: string | null;
+};
+
+const tierConfig = {
+  atom: { label: "Atoms", icon: Atom, description: "Basic building blocks" },
+  molecule: { label: "Molecules", icon: Puzzle, description: "Composed from atoms" },
+  organism: { label: "Organisms", icon: Boxes, description: "Complex UI sections" },
+} as const;
+
+type Tier = keyof typeof tierConfig;
+
+function categorizeTier(category: string): Tier {
+  const c = category.toLowerCase();
+  if (["organism", "organisms", "section", "sections", "page", "pages", "template", "templates"].some(k => c.includes(k))) return "organism";
+  if (["molecule", "molecules", "composite", "composites", "group", "groups"].some(k => c.includes(k))) return "molecule";
+  return "atom";
+}
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<any>(null);
+  const [components, setComponents] = useState<DesignComponent[]>([]);
+  const [selected, setSelected] = useState<DesignComponent | null>(null);
+  const [tab, setTab] = useState<Tier>("atom");
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
-    api.getStats().then(setStats);
+    api.getComponents().then(setComponents);
   }, []);
 
-  if (!stats) return <div className="text-zinc-500 text-sm">Loading...</div>;
+  const grouped = useMemo(() => {
+    const g: Record<Tier, DesignComponent[]> = { atom: [], molecule: [], organism: [] };
+    for (const c of components) g[categorizeTier(c.category)].push(c);
+    return g;
+  }, [components]);
+
+  const filtered = useMemo(() => {
+    const list = grouped[tab];
+    if (!query) return list;
+    const q = query.toLowerCase();
+    return list.filter(c => c.name.toLowerCase().includes(q) || c.category.toLowerCase().includes(q) || c.description?.toLowerCase().includes(q));
+  }, [grouped, tab, query]);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this component?")) return;
+    await api.deleteComponent(id);
+    setComponents(prev => prev.filter(c => c.id !== id));
+    setSelected(null);
+  };
+
+  if (selected) {
+    return <DetailView component={selected} onBack={() => setSelected(null)} onDelete={handleDelete} />;
+  }
 
   return (
-    <div className="max-w-4xl space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-zinc-400 mt-1">Design system component database overview</p>
-      </div>
-
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-zinc-400 text-xs uppercase tracking-wider mb-2">
-            <Layers className="w-3.5 h-3.5" /> Total Components
-          </div>
-          <div className="text-3xl font-bold">{stats.total}</div>
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-zinc-400 text-xs uppercase tracking-wider mb-2">
-            <FolderOpen className="w-3.5 h-3.5" /> Categories
-          </div>
-          <div className="text-3xl font-bold">{stats.categories.length}</div>
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-          <div className="flex items-center gap-2 text-zinc-400 text-xs uppercase tracking-wider mb-2">
-            <Clock className="w-3.5 h-3.5" /> Recent
-          </div>
-          <div className="text-3xl font-bold">{stats.recent.length}</div>
-        </div>
-      </div>
-
-      {stats.categories.length > 0 && (
+    <div className="flex flex-col h-full">
+      <div className="px-6 pt-6 pb-4 space-y-4">
         <div>
-          <h2 className="text-sm font-medium text-zinc-300 mb-3">Categories</h2>
-          <div className="flex flex-wrap gap-2">
-            {stats.categories.map((c: any) => (
-              <Link
-                key={c.category}
-                to={`/components?category=${c.category}`}
-                className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-full text-xs hover:border-violet-500/50 transition-colors"
-              >
-                {c.category} <span className="text-zinc-500 ml-1">{c.count}</span>
-              </Link>
-            ))}
+          <h1 className="text-2xl font-bold tracking-tight">Design System</h1>
+          <p className="text-sm text-muted-foreground mt-1">{components.length} components in database</p>
+        </div>
+        <Tabs value={tab} onValueChange={(v) => { setTab(v as Tier); setQuery(""); }}>
+          <div className="flex items-center gap-4">
+            <TabsList>
+              {(Object.keys(tierConfig) as Tier[]).map((t) => {
+                const { label, icon: Icon } = tierConfig[t];
+                return (
+                  <TabsTrigger key={t} value={t} className="gap-1.5">
+                    <Icon className="size-3.5" />
+                    {label}
+                    <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">{grouped[t].length}</Badge>
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={`Search ${tierConfig[tab].label.toLowerCase()}...`}
+                className="pl-8 h-8 text-xs"
+              />
+            </div>
           </div>
-        </div>
-      )}
 
-      {stats.recent.length > 0 && (
-        <div>
-          <h2 className="text-sm font-medium text-zinc-300 mb-3">Recent Components</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {stats.recent.map((c: any) => (
-              <ComponentCard key={c.id} {...c} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {stats.total === 0 && (
-        <div className="text-center py-16 text-zinc-500">
-          <p className="text-sm">No components yet.</p>
-          <Link to="/import" className="text-violet-400 text-sm hover:underline mt-1 inline-block">
-            Import from Figma or Storybook
-          </Link>
-        </div>
-      )}
+          {(Object.keys(tierConfig) as Tier[]).map((t) => (
+            <TabsContent key={t} value={t} className="mt-4">
+              <TierView tier={t} components={tab === t ? filtered : grouped[t]} onSelect={setSelected} />
+            </TabsContent>
+          ))}
+        </Tabs>
+      </div>
     </div>
   );
+}
+
+function TierView({ tier, components, onSelect }: { tier: Tier; components: DesignComponent[]; onSelect: (c: DesignComponent) => void }) {
+  const { description } = tierConfig[tier];
+
+  if (components.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+        <Box className="size-10 mb-3 opacity-40" />
+        <p className="text-sm">No {tierConfig[tier].label.toLowerCase()} found</p>
+        <p className="text-xs mt-1 opacity-60">{description}</p>
+      </div>
+    );
+  }
+
+  return (
+    <ScrollArea className="h-[calc(100vh-220px)]">
+      <div className="pr-4 space-y-6">
+        <p className="text-xs text-muted-foreground">{description}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {components.map((c) => (
+            <Card
+              key={c.id}
+              className="cursor-pointer hover:border-primary/30 transition-colors group overflow-hidden"
+              onClick={() => onSelect(c)}
+            >
+              <div className="h-36 border-b flex items-center justify-center pointer-events-none bg-muted/10">
+                <Sandbox code={c.code} name={c.name} />
+              </div>
+              <CardHeader className="py-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">{c.name}</CardTitle>
+                  <Badge variant="outline" className="text-[10px]">{c.category}</Badge>
+                </div>
+                {c.description && <CardDescription className="text-xs line-clamp-2">{c.description}</CardDescription>}
+              </CardHeader>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </ScrollArea>
+  );
+}
+
+const detailTabs = ["Preview", "Code", "Usage", "Props"] as const;
+type DetailTab = (typeof detailTabs)[number];
+
+function DetailView({ component, onBack, onDelete }: { component: DesignComponent; onBack: () => void; onDelete: (id: string) => void }) {
+  const [tab, setTab] = useState<DetailTab>("Preview");
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-6 pt-6 pb-4 space-y-4">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={onBack}>
+            <ArrowLeft className="size-4" /> Back
+          </Button>
+          <Separator orientation="vertical" className="h-4" />
+          <h1 className="text-lg font-semibold">{component.name}</h1>
+          <Badge variant="outline" className="text-xs">{component.category}</Badge>
+          <div className="flex-1" />
+          <div className="flex items-center gap-2">
+            {component.figma_url && (
+              <Button variant="outline" size="xs" asChild>
+                <a href={component.figma_url} target="_blank" rel="noreferrer">
+                  <ExternalLink className="size-3" /> Figma
+                </a>
+              </Button>
+            )}
+            {component.storybook_url && (
+              <Button variant="outline" size="xs" asChild>
+                <a href={component.storybook_url} target="_blank" rel="noreferrer">
+                  <ExternalLink className="size-3" /> Storybook
+                </a>
+              </Button>
+            )}
+            <Button variant="ghost" size="icon-xs" onClick={() => onDelete(component.id)} className="text-muted-foreground hover:text-destructive">
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+        {component.description && <p className="text-sm text-muted-foreground">{component.description}</p>}
+
+        <Tabs value={tab} onValueChange={(v) => setTab(v as DetailTab)}>
+          <TabsList variant="line">
+            <TabsTrigger value="Preview"><Layout className="size-3.5" /> Preview</TabsTrigger>
+            <TabsTrigger value="Code"><Code2 className="size-3.5" /> Code</TabsTrigger>
+            <TabsTrigger value="Usage"><BookOpen className="size-3.5" /> Usage</TabsTrigger>
+            <TabsTrigger value="Props"><Braces className="size-3.5" /> Props</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="Preview" className="mt-4">
+            <div className="h-[calc(100vh-320px)] rounded-lg border border-dashed flex items-center justify-center bg-muted/10">
+              <Sandbox code={component.code} name={component.name} />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="Code" className="mt-4">
+            <CodeBlock code={component.code} />
+          </TabsContent>
+
+          <TabsContent value="Usage" className="mt-4">
+            {component.usage ? (
+              <Card>
+                <CardContent>
+                  <div className="prose prose-invert prose-sm max-w-none whitespace-pre-wrap text-muted-foreground">{component.usage}</div>
+                </CardContent>
+              </Card>
+            ) : (
+              <EmptyTab label="No usage guidelines yet" />
+            )}
+          </TabsContent>
+
+          <TabsContent value="Props" className="mt-4">
+            {component.props ? (
+              <CodeBlock code={formatJson(component.props)} language="json" />
+            ) : (
+              <EmptyTab label="No props defined yet" />
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+}
+
+function EmptyTab({ label }: { label: string }) {
+  return <p className="text-sm text-muted-foreground italic py-8 text-center">{label}</p>;
+}
+
+function formatJson(json: string): string {
+  try { return JSON.stringify(JSON.parse(json), null, 2); } catch { return json; }
 }
